@@ -8,16 +8,14 @@
 #include "login.h"
 #include "utils.h"
 
-#define USERNAME_FILE "/home/nginx/username"
-#define PASSWORD_FILE "/home/nginx/password"
-#define CEIBA_LOGIN_URL "https://ceiba.ntu.edu.tw/ChkSessLib.php"
-#define CC_LOGIN_URL "https://web2.cc.ntu.edu.tw/p/s/login2/p1.php"
-#define COOKIEJAR_PATH "/home/nginx/cookies"
-
 
 // Login CEIBA and save the session cookie to COOKIEJAR_PATH
 static int
-_login_session(ngx_pool_t *pool, ngx_log_t *log)
+_login_ceiba(ngx_pool_t *pool,
+             ngx_log_t *log,
+             const char *username_path,
+             const char *password_path,
+             const char *cookiejar_path)
 {
     CURL *curl;
     CURLcode res;
@@ -34,16 +32,18 @@ _login_session(ngx_pool_t *pool, ngx_log_t *log)
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
     curl_easy_setopt(curl, CURLOPT_HEADER, 1);
 #endif
-    curl_easy_setopt(curl, CURLOPT_URL, CEIBA_LOGIN_URL);
+    curl_easy_setopt(curl, CURLOPT_URL,
+                     "https://ceiba.ntu.edu.tw/ChkSessLib.php");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, COOKIEJAR_PATH);
+    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookiejar_path);
 
     res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
     if (res != CURLE_OK) {
         log_err(log, "get ceiba:%s", curl_easy_strerror(res));
+        return -1;
     }
-    curl_easy_cleanup(curl);
 
 
     ///////
@@ -60,7 +60,7 @@ _login_session(ngx_pool_t *pool, ngx_log_t *log)
     ngx_fd_t fd;
     ssize_t sz;
 
-    fd = ngx_open_file(USERNAME_FILE, NGX_FILE_RDONLY, NGX_FILE_OPEN, 0);
+    fd = ngx_open_file(username_path, NGX_FILE_RDONLY, NGX_FILE_OPEN, 0);
     if (fd < 0) {
         log_err(log, "open file");
         return fd;
@@ -73,7 +73,7 @@ _login_session(ngx_pool_t *pool, ngx_log_t *log)
     ngx_close_file(fd);
     username[sz] = '\0';
 
-    fd = ngx_open_file(PASSWORD_FILE, NGX_FILE_RDONLY, NGX_FILE_OPEN, 0);
+    fd = ngx_open_file(password_path, NGX_FILE_RDONLY, NGX_FILE_OPEN, 0);
     if (fd < 0) {
         log_err(log, "open file");
         return fd;
@@ -99,17 +99,19 @@ _login_session(ngx_pool_t *pool, ngx_log_t *log)
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
     curl_easy_setopt(curl, CURLOPT_HEADER, 1);
 #endif
-    curl_easy_setopt(curl, CURLOPT_URL, CC_LOGIN_URL);
+    curl_easy_setopt(curl, CURLOPT_URL,
+                     "https://web2.cc.ntu.edu.tw/p/s/login2/p1.php");
     curl_easy_setopt(curl, CURLOPT_POST, 1);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, COOKIEJAR_PATH);
+    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookiejar_path);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postfields);
 
     res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
     if (res != CURLE_OK) {
         log_err(log, "login ceiba:%s", curl_easy_strerror(res));
+        return -1;
     }
-    curl_easy_cleanup(curl);
 
 
     ///////
@@ -124,31 +126,30 @@ _login_session(ngx_pool_t *pool, ngx_log_t *log)
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
     curl_easy_setopt(curl, CURLOPT_HEADER, 1);
 #endif
-    curl_easy_setopt(curl, CURLOPT_URL, CEIBA_LOGIN_URL);
+    curl_easy_setopt(curl, CURLOPT_URL,
+                     "https://ceiba.ntu.edu.tw/ChkSessLib.php");
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, COOKIEJAR_PATH);
+    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookiejar_path);
 
     res = curl_easy_perform(curl);
-    if (res != CURLE_OK) {
-        log_err(log, "acces ceiba:%s", curl_easy_strerror(res));
-    }
     curl_easy_cleanup(curl);
+    if (res != CURLE_OK) {
+        log_err(log, "access ceiba:%s", curl_easy_strerror(res));
+        return -1;
+    }
 
     return 0;
 }
 
-
-ngx_array_t *
-login_ceiba(ngx_pool_t *pool, ngx_log_t *log)
+static ngx_array_t *
+_parse_cookie_jar(ngx_pool_t *pool,
+                  ngx_log_t *log,
+                  const char *path,
+                  const char *from_domain)
 {
-    const u_char *from_domain = (const u_char *) "ceiba.ntu.edu.tw";
-
-    _login_session(pool, log);
-
-    ngx_fd_t cookiejar =
-        ngx_open_file(COOKIEJAR_PATH, NGX_FILE_RDONLY, NGX_FILE_OPEN, 0);
-    if (!cookiejar) {
+    ngx_fd_t cookiejar = ngx_open_file(path, NGX_FILE_RDONLY, NGX_FILE_OPEN, 0);
+    if (cookiejar < 0) {
         log_err(log, "open cookie jar");
         return NULL;
     }
@@ -284,4 +285,26 @@ login_ceiba(ngx_pool_t *pool, ngx_log_t *log)
         }
     }
     return cookie_list;
+}
+
+
+#define USERNAME_FILE "/home/nginx/username"
+#define PASSWORD_FILE "/home/nginx/password"
+#define COOKIEJAR_PATH "/home/nginx/cookies"
+
+
+ngx_array_t *
+login_ceiba(ngx_pool_t *pool, ngx_log_t *log)
+{
+    _login_ceiba(pool, log, USERNAME_FILE, PASSWORD_FILE, COOKIEJAR_PATH);
+
+    return _parse_cookie_jar(pool, log, COOKIEJAR_PATH, "ceiba.ntu.edu.tw");
+}
+
+ngx_array_t *
+login_cool(ngx_pool_t *pool, ngx_log_t *log)
+{
+    _login_cool(pool, log, USERNAME_FILE, PASSWORD_FILE, COOKIEJAR_PATH);
+
+    return _parse_cookie_jar(pool, log, COOKIEJAR_PATH, "cool.ntu.edu.tw");
 }
