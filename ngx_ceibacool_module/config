@@ -1,0 +1,11 @@
+ngx_module_type=HTTP
+ngx_addon_name=ngx_ceibacool_module
+ngx_module_name=ngx_ceibacool_module
+ngx_module_srcs="$ngx_addon_dir/src/ngx_ceibacool_module.c \
+                 $ngx_addon_dir/src/login.c"
+ngx_module_deps="$ngx_addon_dir/src/login.h \
+                 $ngx_addon_dir/src/utils.h"
+ngx_module_incs="$ngx_addon_dir/src"
+ngx_module_libs="-lcurl"
+
+. auto/module
