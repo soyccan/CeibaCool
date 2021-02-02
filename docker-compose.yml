@@ -7,7 +7,7 @@ services:
             - "443:443"
         volumes:
             - objs:/root/nginx-1.19.6/objs
-            - ./ngx_ceibacool_module:/root/ngx_ceibacool_module
+            - ./ngx_http_ceibacool_module:/root/ngx_http_ceibacool_module
         # stdin_open: true
         # tty: true
 volumes:

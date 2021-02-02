@@ -7,5 +7,6 @@
 #include <ngx_string.h>
 
 ngx_array_t *login_ceiba(ngx_pool_t *pool, ngx_log_t *log);
+ngx_array_t *login_cool(ngx_pool_t *pool, ngx_log_t *log);
 
 #endif
