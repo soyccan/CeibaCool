@@ -108,11 +108,13 @@ _login_ceiba(ngx_pool_t *pool,
     u_char *postfields_end =
         ngx_snprintf(postfields, sizeof(postfields) - 1, "user=%s&pass=%s",
                      username, password);
-    if (!postfields_end) {
-        log_err(log, "snprintf");
+    *postfields_end = '\0';
+
+    if (postfields_end == postfields + sizeof(postfields) - 1) {
+        log_err(log, "post field overflow");
         goto err;
     }
-    *postfields_end = '\0';
+    log_debug(log, "post fields: %s", postfields);
 
 #ifndef NDEBUG
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
@@ -121,36 +123,12 @@ _login_ceiba(ngx_pool_t *pool,
                      "https://web2.cc.ntu.edu.tw/p/s/login2/p1.php");
     curl_easy_setopt(curl, CURLOPT_POST, 1);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookiejar_path);
+    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookiejar_path);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postfields);
 
     res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
         log_err(log, "login ceiba:%s", curl_easy_strerror(res));
-        goto err;
-    }
-    curl_easy_cleanup(curl);
-
-
-    ///////
-    log_info(log, "Get CEIBA Homepage with Authenticated Session");
-    curl = curl_easy_init();
-    if (!curl) {
-        log_err(log, "curl_easy_init");
-        goto err;
-    }
-
-#ifndef NDEBUG
-    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1);
-#endif
-    curl_easy_setopt(curl, CURLOPT_URL,
-                     "https://ceiba.ntu.edu.tw/ChkSessLib.php");
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookiejar_path);
-
-    res = curl_easy_perform(curl);
-    if (res != CURLE_OK) {
-        log_err(log, "access ceiba:%s", curl_easy_strerror(res));
         goto err;
     }
     curl_easy_cleanup(curl);
@@ -270,9 +248,10 @@ _login_cool(ngx_pool_t *pool,
 {
     CURL *curl;
     CURLcode res;
-    u_char *login_url;
-    u_char username[20], password[20];
-    u_char postfields[500];
+    u_char username[16], password[16];
+    u_char login_url[2048];
+    u_char *login_url_ptr;
+    u_char postfields[512];
     u_char *postfields_end;
     _saml_response_t saml_response;
 
@@ -297,12 +276,20 @@ _login_cool(ngx_pool_t *pool,
         goto err;
     }
 
-    login_url = NULL;
-    res = curl_easy_getinfo(curl, CURLINFO_REDIRECT_URL, &login_url);
-    if (res == CURLE_OK && login_url) {
+    login_url_ptr = NULL;
+    res = curl_easy_getinfo(curl, CURLINFO_REDIRECT_URL, &login_url_ptr);
+    if (res == CURLE_OK && login_url_ptr) {
         /* This is the new absolute URL that you could redirect to, even if
          * the Location: response header may have been a relative URL. */
-        log_debug(log, "Redirected to: %s", login_url);
+        u_char *login_url_end = ngx_cpystrn(login_url, login_url_ptr, sizeof(login_url));
+
+        if (login_url_end == login_url + sizeof(login_url) - 1) {
+            log_err(log, "login url overflow");
+            goto err;
+        }
+
+        log_debug(log, "Redirected to: (%lu) %s", login_url_end - login_url, login_url);
+
     } else {
         log_err(log, "get redirect url");
         goto err;
