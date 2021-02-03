@@ -5,10 +5,8 @@ services:
         ports:
             - "80:80"
             - "443:443"
-        volumes:
-            - objs:/root/nginx-1.19.6/objs
-            - ./ngx_http_ceibacool_module:/root/ngx_http_ceibacool_module
-        # stdin_open: true
-        # tty: true
-volumes:
-    objs:
+        # volumes:
+        #     - objs:/root/nginx-1.19.6/objs
+        #     - ./ngx_http_ceibacool_module:/root/ngx_http_ceibacool_module
+# volumes:
+#     objs:

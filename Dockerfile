@@ -56,8 +56,10 @@ RUN export CONF_ARGS=$(nginx -V 2>&1 | sed -n -e 's/^.*arguments: //p') && \
     sh -c "./configure ${CONF_ARGS} --with-debug --with-compat --add-dynamic-module=../ngx_http_ceibacool_module"
 
 # Build
-# RUN cd nginx-${NGINX_VERSION} && \
-#     make -j6 && make install
+COPY ngx_http_ceibacool_module/src ngx_http_ceibacool_module/src
+
+RUN cd nginx-${NGINX_VERSION} && \
+    make -j6 && make install
 
 # Generate certificate with exising CA certificate
 COPY pki/ca.crt ca.crt
@@ -94,9 +96,22 @@ RUN cp -r /usr/share/easy-rsa . && \
     cp pki/issued/ceibacool.crt /etc/ssl/ceibacool.crt && \
     cp pki/private/ceibacool.key /etc/ssl/private/ceibacool.key
 
+# For Development Stage, Incremental Build
+# COPY bootstrap.sh /
+# CMD ["bash", "/bootstrap.sh"]
+
+## Build Stage 2
+FROM nginx:1.19.6-alpine
+
+COPY --from=builder /usr/lib/nginx/modules/ngx_http_ceibacool_module.so \
+                    /usr/lib/nginx/modules/ngx_http_ceibacool_module.so
+
+COPY --from=builder /etc/ssl/ceibacool.crt /etc/ssl/ceibacool.crt
+COPY --from=builder /etc/ssl/private/ceibacool.key /etc/ssl/private/ceibacool.key
+
 # Merge dir tree
 COPY ./nginx-conf/ /etc/nginx/
-COPY ./html /usr/share/nginx/html
+COPY ./html/ /usr/share/nginx/html/
 
 # NGINX workers are run as user "nginx", so they cannot access /root
 RUN mkdir /home/nginx && \
@@ -107,17 +122,6 @@ COPY --chown=nginx:nginx credentials/ /home/nginx/
 STOPSIGNAL SIGTERM
 STOPSIGNAL SIGINT
 
-# For Development Stage, Incremental Build
-COPY bootstrap.sh /
-CMD ["bash", "/bootstrap.sh"]
+WORKDIR /home/nginx
+CMD ["nginx", "-g", "daemon off;"]
 
-# WORDDIR /home/nginx
-# CMD ["nginx", "-g", "daemon off;"]
-
-
-
-
-## Build Stage 2
-# FROM nginx:1.19.6-alpine
-
-# COPY --from=builder /usr/lib/nginx/modules/ngx_ceibacool_module.so /usr/lib/nginx/modules/ngx_ceibacool_module.so
