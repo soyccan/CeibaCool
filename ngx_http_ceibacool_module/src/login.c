@@ -32,6 +32,7 @@ _load_credentials(ngx_log_t *log,
         return sz;
     }
     ngx_close_file(fd);
+    while (sz && username[sz-1] == '\n') sz--;
     username[sz] = '\0';
 
     fd = ngx_open_file(password_path, NGX_FILE_RDONLY, NGX_FILE_OPEN, 0);
@@ -45,7 +46,10 @@ _load_credentials(ngx_log_t *log,
         return sz;
     }
     ngx_close_file(fd);
+    while (sz && password[sz-1] == '\n') sz--;
     password[sz] = '\0';
+
+    log_debug(log, "load credentials: username=%s; password=%s", username, password);
 
     return 0;
 }
@@ -117,7 +121,7 @@ _login_ceiba(ngx_pool_t *pool,
                      "https://web2.cc.ntu.edu.tw/p/s/login2/p1.php");
     curl_easy_setopt(curl, CURLOPT_POST, 1);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookiejar_path);
+    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookiejar_path);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postfields);
 
     res = curl_easy_perform(curl);
@@ -142,7 +146,7 @@ _login_ceiba(ngx_pool_t *pool,
     curl_easy_setopt(curl, CURLOPT_URL,
                      "https://ceiba.ntu.edu.tw/ChkSessLib.php");
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookiejar_path);
+    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookiejar_path);
 
     res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
@@ -163,6 +167,7 @@ typedef struct {
     ngx_pool_t *pool;
     ngx_log_t *log;
     u_char *str;
+    size_t len;
 } _saml_response_t;
 
 
@@ -234,18 +239,24 @@ _search_saml_response(u_char *data,
             *dest++ = '%';
             *dest++ = '2';
             *dest++ = 'B';
+        } else if (*src == '/') {
+            src++;
+            *dest++ = '%';
+            *dest++ = '2';
+            *dest++ = 'F';
         } else if (*src == '=') {
             src++;
             *dest++ = '%';
             *dest++ = '3';
             *dest++ = 'D';
-        } else {  // include '/'
+        } else {
             *dest++ = *src++;
         }
     }
     *dest = '\0';
 
     userdata->str = dest_begin;
+    userdata->len = dest - dest_begin;
 
     return nmemb;
 }
@@ -313,23 +324,24 @@ _login_cool(ngx_pool_t *pool,
         goto err;
     }
 
-    postfields_end = ngx_snprintf(
-        postfields, sizeof(postfields) - 1,
-        "__VIEWSTATE=/wEPDwUKMTY2MTc3NjUzM2RkUK4S8IU/"
-        "lZeKUDrQIAtt4tRhRV4ZOkEMNdoJavm/SBs="
-        "&__VIEWSTATEGENERATOR=0EE29E36"
-        "&__EVENTVALIDATION=/wEdAAUdVdOEjcCKz7S6sLphMAmFlt/"
-        "S8mKmQpmuxn2LW6B9thvLC/"
-        "FQOf5u4GfePSXQdrRBPkcB0cPQF9vyGTuIFWmijKZWG4rH59f66Vc64WGnN/"
-        "Hmf00Q2eMalQURbQ6cPb45rGUVCHnIwpyxWjkkPDce"
-        "&__db=15"
-        "&ctl00$ContentPlaceHolder1$UsernameTextBox=%s"
-        "&ctl00$ContentPlaceHolder1$PasswordTextBox=%s"
-        "&ctl00$ContentPlaceHolder1$SubmitButton="
-        "\xe7\x99\xbb\xe5\x85\xa5",  // (UTF-8) "登入"
-        username, password);
+    postfields_end =
+        ngx_snprintf(postfields, sizeof(postfields) - 1,
+                     "__VIEWSTATE=%%2FwEPDwUKMTY2MTc3NjUzM2RkUK4S8IU%%"
+                     "2FlZeKUDrQIAtt4tRhRV4ZOkEMNdoJavm%%2FSBs="
+                     "&__VIEWSTATEGENERATOR=0EE29E36"
+                     "&__EVENTVALIDATION=%%2FwEdAAUdVdOEjcCKz7S6sLphMAmFlt%%"
+                     "2FS8mKmQpmuxn2LW6B9thvLC%%"
+                     "2FFQOf5u4GfePSXQdrRBPkcB0cPQF9vyGTuIFWmijKZWG4rH59f66Vc64"
+                     "WGnN%%2FHmf00Q2eMalQURbQ6cPb45rGUVCHnIwpyxWjkkPDce"
+                     "&__db=15"
+                     "&ctl00%%24ContentPlaceHolder1%%24UsernameTextBox=%s"
+                     "&ctl00%%24ContentPlaceHolder1%%24PasswordTextBox=%s"
+                     "&ctl00%%24ContentPlaceHolder1%%24SubmitButton="
+                     "%%E7%%99%%BB%%E5%%85%%A5",  // (UTF-8) "登入"
+                     username, password);
     *postfields_end = '\0';
     log_debug(log, "postfield size = %lu", postfields_end - postfields);
+    log_debug(log, "postfields: %s", postfields);
 
     if (postfields_end == postfields + sizeof(postfields) - 1) {
         log_err(log, "post field overflow");
@@ -345,7 +357,7 @@ _login_cool(ngx_pool_t *pool,
     curl_easy_setopt(curl, CURLOPT_URL, login_url);
     curl_easy_setopt(curl, CURLOPT_POST, 1);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookiejar_path);
+    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookiejar_path);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _search_saml_response);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &saml_response);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, postfields);
@@ -357,7 +369,7 @@ _login_cool(ngx_pool_t *pool,
         goto err;
     }
 
-    log_debug(log, "SAMLResponse: %s", saml_response);
+    log_debug(log, "SAMLResponse: %s", saml_response.str);
 
     curl_easy_cleanup(curl);
 
@@ -376,8 +388,9 @@ _login_cool(ngx_pool_t *pool,
     curl_easy_setopt(curl, CURLOPT_URL, "https://cool.ntu.edu.tw/login/saml");
     curl_easy_setopt(curl, CURLOPT_POST, 1);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookiejar_path);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, saml_response);
+    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookiejar_path);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, saml_response.str);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, saml_response.len);
 
     res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
@@ -385,6 +398,7 @@ _login_cool(ngx_pool_t *pool,
         goto err;
     }
     curl_easy_cleanup(curl);
+    ngx_pfree(pool, saml_response.str);
 
     return 0;
 
@@ -436,10 +450,10 @@ _parse_cookie_jar(ngx_pool_t *pool,
         // in case file is not newline-terminated
         u_char ch = is_eof ? '\n' : buf[rd];
 
-        log_debug(log, "parsing cookiejar");
-        log_debug(log, "rd=%d wr=%d ch=%c state=%d", rd, wr, ch, state);
-        log_debug(log, "data=%s", data);
-        log_debug(log, "");
+        // log_debug(log, "parsing cookiejar");
+        // log_debug(log, "rd=%d wr=%d ch=%c state=%d", rd, wr, ch, state);
+        // log_debug(log, "data=%s", data);
+        // log_debug(log, "");
 
         if (state == S_DATA) {
             if (ch == '\n') {
@@ -472,10 +486,8 @@ _parse_cookie_jar(ngx_pool_t *pool,
 
                 u_char http_form[1024];
                 u_char *http_form_end =
-                    ngx_snprintf(http_form, sizeof(http_form), "%s=%s",
+                    ngx_snprintf(http_form, sizeof(http_form) - 1, "%s=%s",
                                  guard_strptr(name), guard_strptr(value));
-                if (http_form_end == http_form + sizeof(http_form))
-                    http_form_end--;
                 *http_form_end = '\0';
                 size_t http_form_len = http_form_end - http_form;
 
@@ -547,8 +559,13 @@ _parse_cookie_jar(ngx_pool_t *pool,
 ngx_array_t *
 login_ceiba(ngx_pool_t *pool, ngx_log_t *log)
 {
-    _login_ceiba(pool, log, (u_char *) USERNAME_FILE, (u_char *) PASSWORD_FILE,
-                 (u_char *) COOKIEJAR_PATH);
+    int res;
+
+    res = _login_ceiba(pool, log, (u_char *) USERNAME_FILE,
+                       (u_char *) PASSWORD_FILE, (u_char *) COOKIEJAR_PATH);
+
+    if (res < 0)
+        return NULL;
 
     return _parse_cookie_jar(pool, log, (u_char *) COOKIEJAR_PATH,
                              (u_char *) "ceiba.ntu.edu.tw");
@@ -557,8 +574,13 @@ login_ceiba(ngx_pool_t *pool, ngx_log_t *log)
 ngx_array_t *
 login_cool(ngx_pool_t *pool, ngx_log_t *log)
 {
-    _login_cool(pool, log, (u_char *) USERNAME_FILE, (u_char *) PASSWORD_FILE,
-                (u_char *) COOKIEJAR_PATH);
+    int res;
+
+    res = _login_cool(pool, log, (u_char *) USERNAME_FILE,
+                      (u_char *) PASSWORD_FILE, (u_char *) COOKIEJAR_PATH);
+
+    if (res < 0)
+        return NULL;
 
     return _parse_cookie_jar(pool, log, (u_char *) COOKIEJAR_PATH,
                              (u_char *) "cool.ntu.edu.tw");

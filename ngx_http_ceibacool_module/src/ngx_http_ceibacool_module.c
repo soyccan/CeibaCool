@@ -95,7 +95,7 @@ static const ngx_str_t LOCATION_LITERAL = ngx_string("Location");
 static const ngx_str_t CEIBA_URL_LITERAL =
     ngx_string("https://ceiba.ntu.edu.tw/ChkSessLib.php");
 static const ngx_str_t COOL_URL_LITERAL =
-    ngx_string("https://cool.ntu.edu.tw/login/saml");
+    ngx_string("https://cool.ntu.edu.tw/");
 
 
 static ngx_int_t

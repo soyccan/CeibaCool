@@ -30,9 +30,20 @@ RUN apk add --no-cache --virtual .build-deps \
 
 WORKDIR /root
 
-# Prepare Source
+# Prepare source and do some modification
+# Colurful logging!
+# Notice: this breaks config command "error_log /path/to/log/file notice;"
+#         since the keyword "notice" (or emerg, alert, etc.) changes
 RUN wget "http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" && \
-    tar -xf nginx-${NGINX_VERSION}.tar.gz
+    tar -xf nginx-${NGINX_VERSION}.tar.gz && \
+    sed -i -e 's/ngx_string("emerg")/ngx_string("\\e[31memerg\\e[0m")/g' \
+           -e 's/ngx_string("alert")/ngx_string("\\e[31malert\\e[0m")/g' \
+           -e 's/ngx_string("crit")/ngx_string("\\e[31mcrit\\e[0m")/g' \
+           -e 's/ngx_string("error")/ngx_string("\\e[31merror\\e[0m")/g' \
+           -e 's/ngx_string("warn")/ngx_string("\\e[33mwarn\\e[0m")/g' \
+           -e 's/ngx_string("notice")/ngx_string("\\e[33mnotice\\e[0m")/g' \
+           -e 's/ngx_string("info")/ngx_string("\\e[33minfo\\e[0m")/g' \
+           nginx-${NGINX_VERSION}/src/core/ngx_log.c
 
 # Configuration
 COPY ngx_http_ceibacool_module/config ngx_http_ceibacool_module/config
@@ -48,41 +59,44 @@ RUN export CONF_ARGS=$(nginx -V 2>&1 | sed -n -e 's/^.*arguments: //p') && \
 # RUN cd nginx-${NGINX_VERSION} && \
 #     make -j6 && make install
 
-# Generate certificate
+# Generate certificate with exising CA certificate
 COPY pki/ca.crt ca.crt
 COPY pki/private/ca.key ca.key
 RUN cp -r /usr/share/easy-rsa . && \
     cd easy-rsa && \
     sed -i "/\[ easyrsa_ca \]/a extendedKeyUsage = serverAuth" openssl-easyrsa.cnf && \
     ./easyrsa init-pki && \
-    ./easyrsa --req-c="TW" \
-              --req-st="Taiwan" \
-              --req-city="Tainan" \
-              --req-org="SOYCCAN" \
-              --req-email="mail@soyccan.tw" \
-              --req-ou="Root CA" \
-              --req-cn="SOYCCAN Root CA" \
-              --batch \
-              build-ca nopass && \
+    CA_OPTS='--batch \
+             --dn-mode="org" \
+             --req-c="TW" \
+             --req-st="Taiwan" \
+             --req-city="Tainan" \
+             --req-org="SOYCCAN" \
+             --req-email="mail@soyccan.tw" \
+             --req-ou="Root CA" \
+             --req-cn="SOYCCAN Root CA"' && \
+    sh -c "./easyrsa ${CA_OPTS} build-ca nopass" && \
     cp /root/ca.crt pki/ca.crt && \
     cp /root/ca.key pki/private/ca.key && \
-    ./easyrsa --req-c="TW" \
-              --req-st="Taiwan" \
-              --req-city="Tainan" \
-              --req-org="SOYCCAN" \
-              --req-email="mail@soyccan.tw" \
-              --req-ou="Ceiba Cool" \
-              --req-cn="*.soyccan.tw" \
-              --subject-alt-name="DNS:ceiba.ntu.edu.tw, DNS:cool.ntu.edu.tw, IP:140.112.243.11" \
-              --days="825" \
-              --batch \
-              gen-req ceibacool nopass && \
-    ./easyrsa --batch sign-req server ceibacool && \
+    CERT_OPTS='--batch \
+               --dn-mode="org" \
+               --req-c="TW" \
+               --req-st="Taiwan" \
+               --req-city="Tainan" \
+               --req-org="SOYCCAN" \
+               --req-email="mail@soyccan.tw" \
+               --req-ou="Ceiba Cool" \
+               --req-cn="ceibacool.soyccan.tw" \
+               --subject-alt-name="DNS:ceiba.ntu.edu.tw, DNS:cool.ntu.edu.tw, DNS:ceibacool.soyccan.tw, IP:140.112.243.11" \
+               --days="825"' && \
+    sh -c "./easyrsa ${CERT_OPTS} gen-req ceibacool nopass" && \
+    sh -c "./easyrsa ${CERT_OPTS} sign-req server ceibacool" && \
     cp pki/issued/ceibacool.crt /etc/ssl/ceibacool.crt && \
     cp pki/private/ceibacool.key /etc/ssl/private/ceibacool.key
 
 # Merge dir tree
 COPY ./nginx-conf/ /etc/nginx/
+COPY ./html /usr/share/nginx/html
 
 # NGINX workers are run as user "nginx", so they cannot access /root
 RUN mkdir /home/nginx && \
@@ -94,9 +108,10 @@ STOPSIGNAL SIGTERM
 STOPSIGNAL SIGINT
 
 # For Development Stage, Incremental Build
-COPY bootstrap.sh .
-CMD ["bash", "./bootstrap.sh"]
+COPY bootstrap.sh /
+CMD ["bash", "/bootstrap.sh"]
 
+# WORDDIR /home/nginx
 # CMD ["nginx", "-g", "daemon off;"]
 
 
