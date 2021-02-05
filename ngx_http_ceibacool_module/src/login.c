@@ -268,7 +268,6 @@ _login_cool(ngx_pool_t *pool,
 #endif
     curl_easy_setopt(curl, CURLOPT_URL, "https://cool.ntu.edu.tw/login/saml");
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0);
-    curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookiejar_path);
 
     res = curl_easy_perform(curl);
     if (res != CURLE_OK) {

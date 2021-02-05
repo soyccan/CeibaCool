@@ -21,10 +21,9 @@
 
 
 #ifndef NDEBUG
-#define log_debug(log, fmt, ...) \
-    ngx_log_stderr(ngx_errno, "%s:%d: " fmt, __FILE__, __LINE__, ##__VA_ARGS__)
-// ngx_log_error(NGX_LOG_DEBUG, log, ngx_errno, "%s:%d: " fmt "\n", __FILE__,
-//               __LINE__, ##__VA_ARGS__)
+#define log_debug(log, fmt, ...)                                               \
+    ngx_log_error(NGX_LOG_DEBUG, log, ngx_errno, "%s:%d: " fmt "\n", __FILE__, \
+                  __LINE__, ##__VA_ARGS__)
 #else
 #define log_debug(...)
 #endif
