@@ -66,35 +66,32 @@ COPY pki/ca.crt ca.crt
 COPY pki/private/ca.key ca.key
 RUN cp -r /usr/share/easy-rsa . && \
     cd easy-rsa && \
-    sed -i "/\[ easyrsa_ca \]/a extendedKeyUsage = serverAuth" openssl-easyrsa.cnf && \
     ./easyrsa init-pki && \
-    CA_OPTS='--batch \
-             --dn-mode="org" \
-             --req-c="TW" \
-             --req-st="Taiwan" \
-             --req-city="Tainan" \
-             --req-org="SOYCCAN" \
-             --req-email="mail@soyccan.tw" \
-             --req-ou="Root CA" \
-             --req-cn="SOYCCAN Root CA"' && \
-    sh -c "./easyrsa ${CA_OPTS} build-ca nopass" && \
+    ./easyrsa --batch \
+              --dn-mode="org" \
+              --req-c="TW" \
+              --req-st="Taiwan" \
+              --req-city="Tainan" \
+              --req-org="SOYCCAN" \
+              --req-email="mail@soyccan.tw" \
+              --req-ou="Root CA" \
+              --req-cn="SOYCCAN Root CA" \
+              build-ca nopass && \
     cp /root/ca.crt pki/ca.crt && \
     cp /root/ca.key pki/private/ca.key && \
-    CERT_OPTS='--batch \
-               --dn-mode="org" \
-               --req-c="TW" \
-               --req-st="Taiwan" \
-               --req-city="Tainan" \
-               --req-org="SOYCCAN" \
-               --req-email="mail@soyccan.tw" \
-               --req-ou="Ceiba Cool" \
-               --req-cn="ceibacool.soyccan.tw" \
-               --subject-alt-name="DNS:ceiba.ntu.edu.tw, DNS:cool.ntu.edu.tw, DNS:ceibacool.soyccan.tw, IP:140.112.243.11" \
-               --days="825"' && \
-    sh -c "./easyrsa ${CERT_OPTS} gen-req ceibacool nopass" && \
-    sh -c "./easyrsa ${CERT_OPTS} sign-req server ceibacool" && \
-    cp pki/issued/ceibacool.crt /etc/ssl/ceibacool.crt && \
-    cp pki/private/ceibacool.key /etc/ssl/private/ceibacool.key
+    ./easyrsa --batch \
+              --dn-mode="org" \
+              --req-c="TW" \
+              --req-st="Taiwan" \
+              --req-city="Tainan" \
+              --req-org="SOYCCAN" \
+              --req-email="mail@soyccan.tw" \
+              --req-ou="Ceiba Cool" \
+              --subject-alt-name="DNS:ceiba.ntu.edu.tw, DNS:cool.ntu.edu.tw, DNS:ceibacool.soyccan.tw, IP:140.112.243.11" \
+              --days="825" \
+              build-server-full ceibacool.soyccan.tw nopass && \
+    cp pki/issued/ceibacool.soyccan.tw.crt /etc/ssl/ceibacool.crt && \
+    cp pki/private/ceibacool.soyccan.tw.key /etc/ssl/private/ceibacool.key
 
 # For Development Stage, Incremental Build
 # COPY bootstrap.sh /
