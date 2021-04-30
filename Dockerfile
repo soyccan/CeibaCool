@@ -87,7 +87,12 @@ RUN cp -r /usr/share/easy-rsa . && \
               --req-org="SOYCCAN" \
               --req-email="mail@soyccan.tw" \
               --req-ou="Ceiba Cool" \
-              --subject-alt-name="DNS:ceiba.ntu.edu.tw, DNS:cool.ntu.edu.tw, DNS:ceibacool.soyccan.tw, IP:140.112.243.11" \
+              --subject-alt-name="DNS:ceiba.ntu.edu.tw, \
+                                  DNS:cool.ntu.edu.tw, \
+                                  DNS:lti.dlc.ntu.edu.tw, \
+                                  DNS:ceibacool.soyccan.tw, \
+                                  IP:140.112.243.11, \
+                                  IP:10.8.0.1" \
               --days="825" \
               build-server-full ceibacool.soyccan.tw nopass && \
     cp pki/issued/ceibacool.soyccan.tw.crt /etc/ssl/ceibacool.crt && \

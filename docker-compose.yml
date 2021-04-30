@@ -5,6 +5,7 @@ services:
         ports:
             - "80:80"
             - "443:443"
+        restart: unless-stopped
         # volumes:
         #     - objs:/root/nginx-1.19.6/objs
         #     - ./ngx_http_ceibacool_module:/root/ngx_http_ceibacool_module
